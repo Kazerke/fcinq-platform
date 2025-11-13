@@ -7,6 +7,7 @@ localStorage.setItem('sessionId', sessionId);
 
 let sessionTotalCost = 0;
 let isGenerating = false;
+let generationType = 'image'; // Default to image
 
 // Generate unique message ID
 function generateMessageId() {
@@ -18,6 +19,8 @@ async function sendMessage() {
   const input = document.getElementById('prompt-input');
   const sendButton = document.getElementById('send-button');
   const prompt = input.value.trim();
+  const toggleCheckbox = document.getElementById('generation-type-toggle');
+  const currentGenType = toggleCheckbox.checked ? 'video' : 'image';
 
   if (!prompt || isGenerating) return;
 
@@ -31,6 +34,7 @@ async function sendMessage() {
   isGenerating = true;
   input.disabled = true;
   sendButton.disabled = true;
+  toggleCheckbox.disabled = true;
 
   // Clear input
   input.value = '';
@@ -39,13 +43,17 @@ async function sendMessage() {
   appendMessage('user', prompt);
 
   // Show loading state
-  const loadingId = showLoading();
+  const loadingId = showLoading(currentGenType);
 
   try {
     const formData = new FormData();
     formData.append('prompt', prompt);
     formData.append('sessionId', sessionId);
-    formData.append('numImages', '4');
+    formData.append('generationType', currentGenType);
+
+    if (currentGenType === 'image') {
+      formData.append('numImages', '4');
+    }
 
     const response = await fetch(N8N_WEBHOOK_URL, {
       method: 'POST',
@@ -77,6 +85,7 @@ async function sendMessage() {
     isGenerating = false;
     input.disabled = false;
     sendButton.disabled = false;
+    toggleCheckbox.disabled = false;
     input.focus();
   }
 }
@@ -104,8 +113,9 @@ function appendMessage(type, content) {
 }
 
 // Show loading animation
-function showLoading() {
+function showLoading(genType = 'image') {
   const id = generateMessageId();
+  const isVideo = genType === 'video';
   const loadingHTML = `
     <div id="${id}" class="loading-container">
       <div class="progress-circle">
@@ -113,16 +123,17 @@ function showLoading() {
           <circle class="progress-bg" cx="50" cy="50" r="45" />
           <circle id="progress-bar-${id}" class="progress-bar" cx="50" cy="50" r="45" />
         </svg>
+        <div class="breathing-circle"></div>
       </div>
-      <p class="loading-text">Generating images... This may take 20-30 seconds</p>
-      <p class="text-xs text-gray-400 mt-2">Enhancing prompt and creating 4 variations</p>
+      <p class="loading-text">Generating ${isVideo ? 'video' : 'images'}... This may take ${isVideo ? '30-90' : '20-30'} seconds</p>
+      <p class="text-xs text-gray-400 mt-2">${isVideo ? 'Enhancing prompt and creating video' : 'Enhancing prompt and creating 4 variations'}</p>
     </div>
   `;
 
   appendMessage('assistant', loadingHTML);
 
   // Animate progress (fake progress for UX)
-  animateProgress(id, 25);
+  animateProgress(id, isVideo ? 60 : 25);
 
   return id;
 }
@@ -155,7 +166,7 @@ function animateProgress(id, durationSeconds) {
   }, 100);
 }
 
-// Display results (images)
+// Display results (images or video)
 function displayResults(data) {
   // Update session cost
   if (data.cost && data.cost.session !== undefined) {
@@ -173,7 +184,7 @@ function displayResults(data) {
 
     resultHTML = `
       <div class="mb-3">
-        <p class="text-gray-700 font-medium mb-1">✨ Generated ${images.length} professional product displays!</p>
+        <p class="text-gray-700 font-medium mb-1">✨ Generated ${images.length} professional images!</p>
         ${enhancedPrompt ? `<p class="text-xs text-gray-500 italic mt-2">Enhanced prompt: ${enhancedPrompt}</p>` : ''}
       </div>
       <div class="image-grid">
@@ -199,8 +210,35 @@ function displayResults(data) {
       </div>
     `;
 
+  } else if (data.type === 'video' && data.content && data.content.video) {
+    const video = data.content.video;
+    const currentCost = data.cost && data.cost.current ? data.cost.current.toFixed(3) : '0.000';
+    const enhancedPrompt = data.metadata && data.metadata.enhancedPrompt ? data.metadata.enhancedPrompt : '';
+
+    resultHTML = `
+      <div class="mb-3">
+        <p class="text-gray-700 font-medium mb-1">🎬 Generated professional video!</p>
+        ${enhancedPrompt ? `<p class="text-xs text-gray-500 italic mt-2">Enhanced prompt: ${enhancedPrompt}</p>` : ''}
+      </div>
+      <div class="video-container">
+        <video controls loop>
+          <source src="${video.url}" type="video/mp4">
+          Your browser does not support the video tag.
+        </video>
+      </div>
+      <div class="mt-3 flex items-center justify-between">
+        <div class="cost-badge">Cost: $${currentCost}</div>
+        <button
+          class="text-sm text-blue-600 hover:text-blue-700 font-medium"
+          onclick="downloadVideo('${video.url}')"
+        >
+          ⬇️ Download Video
+        </button>
+      </div>
+    `;
+
   } else {
-    resultHTML = '<p class="text-gray-700">Generation completed but no images were returned.</p>';
+    resultHTML = '<p class="text-gray-700">Generation completed but no content was returned.</p>';
   }
 
   appendMessage('assistant', resultHTML);
@@ -210,7 +248,7 @@ function displayResults(data) {
 function downloadImage(url, index) {
   const link = document.createElement('a');
   link.href = url;
-  link.download = `fcinq-product-display-${index}-${Date.now()}.jpg`;
+  link.download = `fcinq-image-${index}-${Date.now()}.jpg`;
   link.target = '_blank';
   link.click();
 }
@@ -225,25 +263,53 @@ function downloadAllImages() {
   });
 }
 
+// Download video
+function downloadVideo(url) {
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = `fcinq-video-${Date.now()}.mp4`;
+  link.target = '_blank';
+  link.click();
+}
+
+// Update hint text based on toggle state
+function updateHintText() {
+  const toggle = document.getElementById('generation-type-toggle');
+  const hintText = document.getElementById('hint-text');
+
+  if (toggle.checked) {
+    // Video mode
+    hintText.textContent = 'Try: "smooth camera movement around a luxury product" or "dynamic brand presentation with elegant transitions"';
+  } else {
+    // Image mode
+    hintText.textContent = 'Try: "professional product photography with dramatic lighting" or "minimalist brand visual with clean composition"';
+  }
+}
+
 // Initialize
 document.addEventListener('DOMContentLoaded', () => {
   // Show welcome message
   appendMessage('assistant', `
     <div>
       <p class="text-gray-700 font-medium">👋 Welcome to FCINQ Platform!</p>
-      <p class="text-sm text-gray-600 mt-2">I can create professional product display images for eyewear using AI.</p>
+      <p class="text-sm text-gray-600 mt-2">Generate professional images and videos for your creative projects using AI.</p>
       <p class="text-sm text-gray-500 mt-3">Try saying:</p>
       <ul class="text-sm text-gray-500 mt-2 space-y-1 list-disc list-inside">
-        <li>"Create professional glasses display images"</li>
-        <li>"Modern sunglasses with dramatic lighting"</li>
-        <li>"Luxury eyewear product photography"</li>
+        <li>"Create a sophisticated product showcase with warm lighting"</li>
+        <li>"Modern minimalist brand visual with clean composition"</li>
+        <li>"Cinematic product reveal with dramatic shadows"</li>
       </ul>
+      <p class="text-xs text-blue-600 mt-3">💡 Toggle between Image and Video mode to choose your output type</p>
       ${N8N_WEBHOOK_URL === 'YOUR_N8N_WEBHOOK_URL_HERE' ?
         '<p class="text-sm text-red-600 mt-3 font-medium">⚠️ Please configure your n8n webhook URL in app.js</p>' :
         '<p class="text-xs text-green-600 mt-3">✓ Connected to workflow</p>'
       }
     </div>
   `);
+
+  // Add toggle event listener
+  const toggle = document.getElementById('generation-type-toggle');
+  toggle.addEventListener('change', updateHintText);
 
   // Focus input
   document.getElementById('prompt-input').focus();

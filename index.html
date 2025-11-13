@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>FCINQ Platform - AI Product Display Generator</title>
+  <title>FCINQ Platform - AI Image & Video Generator</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <link rel="stylesheet" href="style.css">
 </head>
@@ -16,7 +16,7 @@
     <header class="bg-white border-b p-4 flex items-center justify-between">
       <div>
         <h1 class="text-xl font-bold">FCINQ Platform</h1>
-        <p class="text-sm text-gray-500">AI Product Display Generator for Eyewear</p>
+        <p class="text-sm text-gray-500">AI Image & Video Generator</p>
       </div>
       <div class="text-right">
         <p class="text-xs text-gray-500">Session Cost</p>
@@ -31,11 +31,21 @@
 
     <!-- Input Area -->
     <div class="bg-white border-t p-4">
+      <!-- Generation Type Toggle -->
+      <div class="flex items-center justify-center gap-3 mb-3">
+        <span class="text-sm font-medium text-gray-700">Image</span>
+        <label class="toggle-switch">
+          <input type="checkbox" id="generation-type-toggle">
+          <span class="toggle-slider"></span>
+        </label>
+        <span class="text-sm font-medium text-gray-700">Video</span>
+      </div>
+
       <div class="flex gap-2">
         <input
           id="prompt-input"
           type="text"
-          placeholder="Describe what you want to create (e.g., 'professional sunglasses display')"
+          placeholder="Describe what you want to create (e.g., 'modern product showcase with dramatic lighting')"
           class="flex-1 px-4 py-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
           onkeypress="if(event.key === 'Enter') sendMessage()"
         />
@@ -48,7 +58,7 @@
         </button>
       </div>
       <p class="text-xs text-gray-400 mt-2">
-        Try: "create professional glasses display" or "modern sunglasses with dramatic lighting"
+        <span id="hint-text">Try: "create professional glasses display" or "modern sunglasses with dramatic lighting"</span>
       </p>
     </div>
 
