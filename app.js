@@ -9,9 +9,151 @@ let sessionTotalCost = 0;
 let isGenerating = false;
 let generationType = 'image'; // Default to image
 
+// Image context storage
+let imageContext = [];
+
 // Generate unique message ID
 function generateMessageId() {
   return `msg-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+}
+
+// Handle image upload
+async function handleImageUpload(event) {
+  const files = Array.from(event.target.files);
+  if (files.length === 0) return;
+
+  // Show uploaded images in chat
+  const uploadHTML = `
+    <div class="mb-2">
+      <p class="text-sm text-gray-600">📷 Uploaded ${files.length} image${files.length > 1 ? 's' : ''}</p>
+      <div class="upload-preview-grid">
+        ${files.map((file, i) => `
+          <div class="upload-preview-item">
+            <img id="upload-preview-${i}" alt="Upload ${i + 1}" />
+          </div>
+        `).join('')}
+      </div>
+    </div>
+  `;
+  appendMessage('assistant', uploadHTML);
+
+  // Convert images to base64 and add to context
+  for (let i = 0; i < files.length; i++) {
+    const file = files[i];
+    try {
+      const base64 = await fileToBase64(file);
+
+      // Update preview in chat
+      const previewImg = document.getElementById(`upload-preview-${i}`);
+      if (previewImg) {
+        previewImg.src = base64;
+      }
+
+      // Add to context
+      addImageToContext({
+        id: `upload-${Date.now()}-${i}`,
+        url: base64,
+        source: 'upload',
+        filename: file.name
+      });
+    } catch (error) {
+      console.error('Error processing image:', error);
+      appendMessage('error', `Failed to process ${file.name}`);
+    }
+  }
+
+  // Reset file input
+  event.target.value = '';
+}
+
+// Convert file to base64
+function fileToBase64(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result);
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+}
+
+// Add image to context
+function addImageToContext(image) {
+  // Check if already in context
+  if (imageContext.find(img => img.id === image.id)) {
+    return;
+  }
+
+  imageContext.push(image);
+  updateContextPreview();
+}
+
+// Remove image from context
+function removeImageFromContext(imageId) {
+  imageContext = imageContext.filter(img => img.id !== imageId);
+
+  // Remove selection indicator from generated images
+  const imageItem = document.querySelector(`.image-item[data-image-id="${imageId}"]`);
+  if (imageItem) {
+    imageItem.classList.remove('selected');
+  }
+
+  updateContextPreview();
+}
+
+// Clear all image context
+function clearImageContext() {
+  imageContext = [];
+
+  // Remove all selection indicators
+  document.querySelectorAll('.image-item.selected').forEach(item => {
+    item.classList.remove('selected');
+  });
+
+  updateContextPreview();
+}
+
+// Update context preview UI
+function updateContextPreview() {
+  const preview = document.getElementById('context-preview');
+  const contextImagesEl = document.getElementById('context-images');
+  const contextCount = document.getElementById('context-count');
+
+  if (imageContext.length === 0) {
+    preview.classList.add('hidden');
+    return;
+  }
+
+  preview.classList.remove('hidden');
+  contextCount.textContent = imageContext.length;
+
+  contextImagesEl.innerHTML = imageContext.map(img => `
+    <div class="context-thumb">
+      <img src="${img.url}" alt="${img.source}" />
+      <div class="context-thumb-remove" onclick="removeImageFromContext('${img.id}')">×</div>
+    </div>
+  `).join('');
+}
+
+// Toggle image selection (for generated images)
+function toggleImageSelection(imageId, imageUrl) {
+  const imageItem = document.querySelector(`.image-item[data-image-id="${imageId}"]`);
+  if (!imageItem) return;
+
+  const isSelected = imageItem.classList.contains('selected');
+
+  if (isSelected) {
+    // Deselect
+    imageItem.classList.remove('selected');
+    removeImageFromContext(imageId);
+  } else {
+    // Select
+    imageItem.classList.add('selected');
+    addImageToContext({
+      id: imageId,
+      url: imageUrl,
+      source: 'generated'
+    });
+  }
 }
 
 // Send message to n8n webhook
@@ -55,6 +197,15 @@ async function sendMessage() {
       formData.append('numImages', '4');
     }
 
+    // Add image context if available
+    if (imageContext.length > 0) {
+      formData.append('imageContext', JSON.stringify(imageContext.map(img => ({
+        id: img.id,
+        url: img.url,
+        source: img.source
+      }))));
+    }
+
     const response = await fetch(N8N_WEBHOOK_URL, {
       method: 'POST',
       body: formData
@@ -72,6 +223,8 @@ async function sendMessage() {
     // Display results
     if (data.phase === 'complete') {
       displayResults(data);
+      // Clear image context after successful generation
+      clearImageContext();
     } else {
       appendMessage('error', 'Unexpected response format from workflow');
     }
@@ -169,8 +322,8 @@ function animateProgress(id, durationSeconds) {
 // Display results (images or video)
 function displayResults(data) {
   // Update session cost
-  if (data.cost && data.cost.session !== undefined) {
-    sessionTotalCost = data.cost.session;
+  if (data.cost && data.cost.current !== undefined) {
+    sessionTotalCost += data.cost.current;
     document.getElementById('session-cost').textContent = `$${sessionTotalCost.toFixed(3)}`;
   }
 
@@ -185,14 +338,15 @@ function displayResults(data) {
     resultHTML = `
       <div class="mb-3">
         <p class="text-gray-700 font-medium mb-1">✨ Generated ${images.length} professional images!</p>
+        <p class="text-xs text-blue-600 mt-1">💡 Click any image to select it for your next prompt</p>
         ${enhancedPrompt ? `<p class="text-xs text-gray-500 italic mt-2">Enhanced prompt: ${enhancedPrompt}</p>` : ''}
       </div>
       <div class="image-grid">
         ${images.map((img, i) => `
-          <div class="image-item" data-image-id="${img.id || i}">
+          <div class="image-item" data-image-id="${img.id || i}" onclick="toggleImageSelection('${img.id || i}', '${img.url}')">
             <img src="${img.url}" alt="Generated image ${i + 1}" loading="lazy" />
             <div class="image-actions">
-              <button class="action-btn" onclick="downloadImage('${img.url}', ${i + 1})">
+              <button class="action-btn" onclick="event.stopPropagation(); downloadImage('${img.url}', ${i + 1})">
                 ⬇️ Download
               </button>
             </div>
@@ -300,6 +454,7 @@ document.addEventListener('DOMContentLoaded', () => {
         <li>"Cinematic product reveal with dramatic shadows"</li>
       </ul>
       <p class="text-xs text-blue-600 mt-3">💡 Toggle between Image and Video mode to choose your output type</p>
+      <p class="text-xs text-blue-600 mt-2">📷 Upload images or click generated images to use as context for your next prompt</p>
       ${N8N_WEBHOOK_URL === 'YOUR_N8N_WEBHOOK_URL_HERE' ?
         '<p class="text-sm text-red-600 mt-3 font-medium">⚠️ Please configure your n8n webhook URL in app.js</p>' :
         '<p class="text-xs text-green-600 mt-3">✓ Connected to workflow</p>'

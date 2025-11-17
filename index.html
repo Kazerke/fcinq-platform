@@ -31,6 +31,15 @@
 
     <!-- Input Area -->
     <div class="bg-white border-t p-4">
+      <!-- Image Context Preview -->
+      <div id="context-preview" class="hidden mb-3 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+        <div class="flex items-center justify-between mb-2">
+          <p class="text-sm font-medium text-blue-900">📎 Images attached as context (<span id="context-count">0</span>)</p>
+          <button onclick="clearImageContext()" class="text-xs text-blue-600 hover:text-blue-800 font-medium">Clear All</button>
+        </div>
+        <div id="context-images" class="flex gap-2 overflow-x-auto"></div>
+      </div>
+
       <!-- Generation Type Toggle -->
       <div class="flex items-center justify-center gap-3 mb-3">
         <span class="text-sm font-medium text-gray-700">Image</span>
@@ -42,6 +51,19 @@
       </div>
 
       <div class="flex gap-2">
+        <!-- Image Upload Button -->
+        <label for="image-upload" class="px-4 py-3 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 font-medium transition-colors cursor-pointer flex items-center justify-center">
+          <input
+            type="file"
+            id="image-upload"
+            accept="image/*"
+            multiple
+            class="hidden"
+            onchange="handleImageUpload(event)"
+          />
+          📷
+        </label>
+
         <input
           id="prompt-input"
           type="text"
