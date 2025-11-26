@@ -366,3 +366,33 @@ button:disabled {
   height: 100%;
   object-fit: cover;
 }
+
+/* Model Dropdown */
+.model-dropdown {
+  padding: 6px 12px;
+  border: 1px solid #d1d5db;
+  border-radius: 8px;
+  background-color: white;
+  color: #374151;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s;
+  outline: none;
+  min-width: 200px;
+}
+
+.model-dropdown:hover {
+  border-color: #9ca3af;
+}
+
+.model-dropdown:focus {
+  border-color: #3b82f6;
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+}
+
+.model-dropdown:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  background-color: #f9fafb;
+}

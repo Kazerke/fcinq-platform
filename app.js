@@ -12,9 +12,84 @@ let generationType = 'image'; // Default to image
 // Image context storage
 let imageContext = [];
 
+// Model configurations for each generation path
+const MODEL_CONFIGS = {
+  't2i': [ // Text-to-Image
+    { id: 'nano-banana', label: 'Nano Banana', price: '$0.05' },
+    { id: 'nano-banana-pro', label: 'Nano Banana Pro', price: '$0.08' },
+    { id: 'imagen4', label: 'Imagen 4', price: '$0.12' }
+  ],
+  'i2i': [ // Image-to-Image (edit)
+    { id: 'nano-banana-edit', label: 'Nano Banana Edit', price: '$0.08' },
+    { id: 'flux-kontext', label: 'Flux Kontext', price: '$0.10' }
+  ],
+  't2v': [ // Text-to-Video
+    { id: 'kling', label: 'Kling', price: '$0.35' },
+    { id: 'veo3-fast', label: 'Veo 3 Fast', price: '$0.75' },
+    { id: 'veo3', label: 'Veo 3', price: '$1.00' },
+    { id: 'sora2-t2v', label: 'Sora 2', price: '$0.40' },
+    { id: 'sora2-t2v-pro', label: 'Sora 2 Pro', price: '$2.00' }
+  ],
+  'i2v': [ // Image-to-Video
+    { id: 'sora2-i2v', label: 'Sora 2 I2V', price: '$0.50' },
+    { id: 'sora2-i2v-pro', label: 'Sora 2 I2V Pro', price: '$2.50' },
+    { id: 'veo3-fast-i2v', label: 'Veo 3 Fast I2V', price: '$0.85' },
+    { id: 'veo3-i2v', label: 'Veo 3 I2V', price: '$1.20' }
+  ]
+};
+
+// Default models for each path
+const DEFAULT_MODELS = {
+  't2i': 'nano-banana',
+  'i2i': 'nano-banana-edit',
+  't2v': 'kling',
+  'i2v': 'kling'
+};
+
 // Generate unique message ID
 function generateMessageId() {
   return `msg-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+}
+
+// Determine current generation path based on toggle and image context
+function getCurrentPath() {
+  const toggleCheckbox = document.getElementById('generation-type-toggle');
+  const isVideo = toggleCheckbox ? toggleCheckbox.checked : false;
+  const hasImageContext = imageContext.length > 0;
+
+  if (!isVideo && !hasImageContext) return 't2i'; // Text-to-Image
+  if (!isVideo && hasImageContext) return 'i2i'; // Image-to-Image (edit)
+  if (isVideo && !hasImageContext) return 't2v'; // Text-to-Video
+  if (isVideo && hasImageContext) return 'i2v'; // Image-to-Video
+}
+
+// Update model dropdown based on current path
+function updateModelDropdown() {
+  const modelSelect = document.getElementById('model-select');
+  if (!modelSelect) return;
+
+  const currentPath = getCurrentPath();
+  const models = MODEL_CONFIGS[currentPath];
+  const currentValue = modelSelect.value;
+
+  // Clear existing options
+  modelSelect.innerHTML = '';
+
+  // Add new options
+  models.forEach(model => {
+    const option = document.createElement('option');
+    option.value = model.id;
+    option.textContent = `${model.label} (${model.price})`;
+    modelSelect.appendChild(option);
+  });
+
+  // Try to preserve selection if the model exists in new path, otherwise use default
+  const modelExists = models.some(m => m.id === currentValue);
+  if (modelExists) {
+    modelSelect.value = currentValue;
+  } else {
+    modelSelect.value = DEFAULT_MODELS[currentPath];
+  }
 }
 
 // Handle image upload
@@ -85,6 +160,7 @@ function addImageToContext(image) {
 
   imageContext.push(image);
   updateContextPreview();
+  updateModelDropdown(); // Update model options based on new context
 }
 
 // Remove image from context
@@ -98,6 +174,7 @@ function removeImageFromContext(imageId) {
   }
 
   updateContextPreview();
+  updateModelDropdown(); // Update model options based on new context
 }
 
 // Clear all image context
@@ -110,6 +187,7 @@ function clearImageContext() {
   });
 
   updateContextPreview();
+  updateModelDropdown(); // Update model options based on new context
 }
 
 // Update context preview UI
@@ -156,13 +234,15 @@ function toggleImageSelection(imageId, imageUrl) {
   }
 }
 
-// Send message to n8n webhook
+// Send message to n8n webhook with timeout
 async function sendMessage() {
   const input = document.getElementById('prompt-input');
   const sendButton = document.getElementById('send-button');
   const prompt = input.value.trim();
   const toggleCheckbox = document.getElementById('generation-type-toggle');
   const currentGenType = toggleCheckbox.checked ? 'video' : 'image';
+  const modelSelect = document.getElementById('model-select');
+  const selectedModel = modelSelect.value;
 
   if (!prompt || isGenerating) return;
 
@@ -177,6 +257,7 @@ async function sendMessage() {
   input.disabled = true;
   sendButton.disabled = true;
   toggleCheckbox.disabled = true;
+  modelSelect.disabled = true;
 
   // Clear input
   input.value = '';
@@ -184,14 +265,28 @@ async function sendMessage() {
   // Display user message
   appendMessage('user', prompt);
 
-  // Show loading state
-  const loadingId = showLoading(currentGenType);
+  // Determine timeout based on model and generation type
+  const currentPath = getCurrentPath();
+  let timeout = 120000; // Default 2 minutes
+
+  // I2V and T2V with premium models need more time
+  if (currentPath === 'i2v' || currentPath === 't2v') {
+    if (selectedModel.includes('veo') || selectedModel.includes('sora')) {
+      timeout = 300000; // 5 minutes for Veo/Sora
+    } else {
+      timeout = 180000; // 3 minutes for other video models
+    }
+  }
+
+  // Show loading state with model info
+  const loadingId = showLoading(currentGenType, selectedModel, currentPath);
 
   try {
     const formData = new FormData();
     formData.append('prompt', prompt);
     formData.append('sessionId', sessionId);
     formData.append('generationType', currentGenType);
+    formData.append('selectedModel', selectedModel);
 
     if (currentGenType === 'image') {
       formData.append('numImages', '4');
@@ -206,10 +301,17 @@ async function sendMessage() {
       }))));
     }
 
+    // Create abort controller for timeout
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), timeout);
+
     const response = await fetch(N8N_WEBHOOK_URL, {
       method: 'POST',
-      body: formData
+      body: formData,
+      signal: controller.signal
     });
+
+    clearTimeout(timeoutId);
 
     if (!response.ok) {
       throw new Error(`HTTP error! status: ${response.status}`);
@@ -232,13 +334,39 @@ async function sendMessage() {
   } catch (error) {
     hideLoading(loadingId);
     console.error('Error:', error);
-    appendMessage('error', `Error: ${error.message}. Please check your webhook URL and n8n workflow.`);
+
+    // Provide better error messages based on error type
+    if (error.name === 'AbortError') {
+      appendMessage('error', `
+        <p class="font-semibold mb-2">⏱️ Generation Timeout</p>
+        <p class="text-sm">The generation is taking longer than expected. This can happen with ${selectedModel} on the ${currentPath.toUpperCase()} path.</p>
+        <p class="text-sm mt-2"><strong>Good news:</strong> Your video is likely still being generated in the background! Check your n8n workflow executions to see the result.</p>
+        <p class="text-sm mt-2 text-blue-600">💡 Tip: Premium video models (Veo, Sora) can take 2-3 minutes to generate.</p>
+      `);
+    } else if (error.message.includes('Failed to fetch') || error.message.includes('NetworkError')) {
+      appendMessage('error', `
+        <p class="font-semibold mb-2">🌐 Network Error</p>
+        <p class="text-sm">Unable to connect to the workflow. Please check:</p>
+        <ul class="text-sm mt-2 list-disc list-inside space-y-1">
+          <li>Your internet connection</li>
+          <li>The webhook URL is correct</li>
+          <li>The n8n workflow is active</li>
+        </ul>
+      `);
+    } else {
+      appendMessage('error', `
+        <p class="font-semibold mb-2">❌ Error</p>
+        <p class="text-sm">${error.message}</p>
+        <p class="text-sm mt-2">Please check your webhook URL and n8n workflow.</p>
+      `);
+    }
   } finally {
     // Re-enable input
     isGenerating = false;
     input.disabled = false;
     sendButton.disabled = false;
     toggleCheckbox.disabled = false;
+    modelSelect.disabled = false;
     input.focus();
   }
 }
@@ -265,10 +393,54 @@ function appendMessage(type, content) {
   return messageEl;
 }
 
-// Show loading animation
-function showLoading(genType = 'image') {
+// Show loading animation with model-specific timing
+function showLoading(genType = 'image', model = '', path = 't2i') {
   const id = generateMessageId();
   const isVideo = genType === 'video';
+
+  // Determine time estimate based on path and model
+  let timeEstimate = '20-30 seconds';
+  let durationSeconds = 25;
+  let description = 'Enhancing prompt and creating 4 variations';
+
+  if (path === 't2i') {
+    timeEstimate = '20-30 seconds';
+    durationSeconds = 25;
+    description = 'Enhancing prompt and creating 4 variations';
+  } else if (path === 'i2i') {
+    timeEstimate = '25-35 seconds';
+    durationSeconds = 30;
+    description = 'Enhancing prompt and editing image';
+  } else if (path === 't2v') {
+    if (model.includes('sora')) {
+      timeEstimate = '60-120 seconds';
+      durationSeconds = 90;
+      description = 'Enhancing prompt and creating high-quality video with Sora';
+    } else if (model.includes('veo')) {
+      timeEstimate = '60-120 seconds';
+      durationSeconds = 90;
+      description = 'Enhancing prompt and creating high-quality video with Veo';
+    } else {
+      timeEstimate = '30-60 seconds';
+      durationSeconds = 45;
+      description = 'Enhancing prompt and creating video';
+    }
+  } else if (path === 'i2v') {
+    if (model.includes('sora')) {
+      timeEstimate = '90-180 seconds';
+      durationSeconds = 135;
+      description = 'Enhancing prompt and animating image with Sora (this can take 2-3 minutes)';
+    } else if (model.includes('veo')) {
+      timeEstimate = '90-180 seconds';
+      durationSeconds = 135;
+      description = 'Enhancing prompt and animating image with Veo (this can take 2-3 minutes)';
+    } else {
+      timeEstimate = '40-90 seconds';
+      durationSeconds = 65;
+      description = 'Enhancing prompt and animating image';
+    }
+  }
+
   const loadingHTML = `
     <div id="${id}" class="loading-container">
       <div class="progress-circle">
@@ -278,15 +450,18 @@ function showLoading(genType = 'image') {
         </svg>
         <div class="breathing-circle"></div>
       </div>
-      <p class="loading-text">Generating ${isVideo ? 'video' : 'images'}... This may take ${isVideo ? '30-90' : '20-30'} seconds</p>
-      <p class="text-xs text-gray-400 mt-2">${isVideo ? 'Enhancing prompt and creating video' : 'Enhancing prompt and creating 4 variations'}</p>
+      <p class="loading-text">Generating ${isVideo ? 'video' : 'images'}... This may take ${timeEstimate}</p>
+      <p class="text-xs text-gray-400 mt-2">${description}</p>
+      ${path === 'i2v' && (model.includes('sora') || model.includes('veo')) ?
+        '<p class="text-xs text-blue-500 mt-2 font-medium">⏱️ Please be patient - premium video models take longer but deliver exceptional quality!</p>' :
+        ''}
     </div>
   `;
 
   appendMessage('assistant', loadingHTML);
 
   // Animate progress (fake progress for UX)
-  animateProgress(id, isVideo ? 60 : 25);
+  animateProgress(id, durationSeconds);
 
   return id;
 }
@@ -354,7 +529,10 @@ function displayResults(data) {
         `).join('')}
       </div>
       <div class="mt-3 flex items-center justify-between">
-        <div class="cost-badge">Cost: $${currentCost}</div>
+        <div class="flex items-center gap-3">
+          <div class="cost-badge">Cost: $${currentCost}</div>
+          ${data.metadata && data.metadata.modelName ? `<div class="text-xs text-gray-500" style="padding: 4px 0;">Model: ${data.metadata.modelName}</div>` : ''}
+        </div>
         <button
           class="text-sm text-blue-600 hover:text-blue-700 font-medium"
           onclick="downloadAllImages()"
@@ -381,7 +559,10 @@ function displayResults(data) {
         </video>
       </div>
       <div class="mt-3 flex items-center justify-between">
-        <div class="cost-badge">Cost: $${currentCost}</div>
+        <div class="flex items-center gap-3">
+          <div class="cost-badge">Cost: $${currentCost}</div>
+          ${data.metadata && data.metadata.modelName ? `<div class="text-xs text-gray-500" style="padding: 4px 0;">Model: ${data.metadata.modelName}</div>` : ''}
+        </div>
         <button
           class="text-sm text-blue-600 hover:text-blue-700 font-medium"
           onclick="downloadVideo('${video.url}')"
@@ -438,6 +619,9 @@ function updateHintText() {
     // Image mode
     hintText.textContent = 'Try: "professional product photography with dramatic lighting" or "minimalist brand visual with clean composition"';
   }
+
+  // Update model dropdown when toggle changes
+  updateModelDropdown();
 }
 
 // Initialize
@@ -465,6 +649,9 @@ document.addEventListener('DOMContentLoaded', () => {
   // Add toggle event listener
   const toggle = document.getElementById('generation-type-toggle');
   toggle.addEventListener('change', updateHintText);
+
+  // Initialize model dropdown
+  updateModelDropdown();
 
   // Focus input
   document.getElementById('prompt-input').focus();

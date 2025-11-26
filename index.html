@@ -40,14 +40,22 @@
         <div id="context-images" class="flex gap-2 overflow-x-auto"></div>
       </div>
 
-      <!-- Generation Type Toggle -->
-      <div class="flex items-center justify-center gap-3 mb-3">
-        <span class="text-sm font-medium text-gray-700">Image</span>
-        <label class="toggle-switch">
-          <input type="checkbox" id="generation-type-toggle">
-          <span class="toggle-slider"></span>
-        </label>
-        <span class="text-sm font-medium text-gray-700">Video</span>
+      <!-- Generation Type Toggle and Model Selection -->
+      <div class="flex flex-col sm:flex-row items-center justify-between gap-3 mb-3">
+        <div class="flex items-center gap-3">
+          <span class="text-sm font-medium text-gray-700">Image</span>
+          <label class="toggle-switch">
+            <input type="checkbox" id="generation-type-toggle">
+            <span class="toggle-slider"></span>
+          </label>
+          <span class="text-sm font-medium text-gray-700">Video</span>
+        </div>
+        <div class="flex items-center gap-2">
+          <label for="model-select" class="text-sm font-medium text-gray-700">Model:</label>
+          <select id="model-select" class="model-dropdown">
+            <option value="nano-banana">Nano Banana ($0.05)</option>
+          </select>
+        </div>
       </div>
 
       <div class="flex gap-2">
