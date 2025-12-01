@@ -12,6 +12,9 @@ let generationType = 'image'; // Default to image
 // Image context storage
 let imageContext = [];
 
+// Track if user has manually set enhance preference (to avoid auto-override)
+let userSetEnhance = false;
+
 // Model configurations for each generation path
 const MODEL_CONFIGS = {
   't2i': [ // Text-to-Image
@@ -21,6 +24,7 @@ const MODEL_CONFIGS = {
   ],
   'i2i': [ // Image-to-Image (edit)
     { id: 'nano-banana-edit', label: 'Nano Banana Edit', price: '$0.08' },
+    { id: 'nano-banana-pro-edit', label: 'Nano Banana Pro Edit', price: '$0.15' },
     { id: 'flux-kontext', label: 'Flux Kontext', price: '$0.10' }
   ],
   't2v': [ // Text-to-Video
@@ -34,7 +38,8 @@ const MODEL_CONFIGS = {
     { id: 'sora2-i2v', label: 'Sora 2 I2V', price: '$0.50' },
     { id: 'sora2-i2v-pro', label: 'Sora 2 I2V Pro', price: '$2.50' },
     { id: 'veo3-fast-i2v', label: 'Veo 3 Fast I2V', price: '$0.85' },
-    { id: 'veo3-i2v', label: 'Veo 3 I2V', price: '$1.20' }
+    { id: 'veo3-i2v', label: 'Veo 3 I2V', price: '$1.20' },
+    { id: 'veo31-flf', label: 'Veo 3.1 First-Last Frame', price: '$0.75', requiresTwoImages: true }
   ]
 };
 
@@ -45,6 +50,93 @@ const DEFAULT_MODELS = {
   't2v': 'kling',
   'i2v': 'kling'
 };
+
+// Model-specific additional options
+// Maps model IDs to their available options with possible values
+const MODEL_OPTIONS = {
+  // T2I models
+  'nano-banana': {
+    aspect_ratio: { label: 'Aspect Ratio', values: ['1:1', '16:9', '9:16'], default: '1:1' }
+  },
+  'nano-banana-pro': {
+    aspect_ratio: { label: 'Aspect Ratio', values: ['1:1', '16:9', '9:16'], default: '1:1' },
+    resolution: { label: 'Resolution', values: ['1K', '2K', '4K'], default: '1K' }
+  },
+  'imagen4': {
+    aspect_ratio: { label: 'Aspect Ratio', values: ['1:1', '16:9', '9:16'], default: '1:1' }
+  },
+  // I2I models
+  'nano-banana-edit': {
+    aspect_ratio: { label: 'Aspect Ratio', values: ['1:1', '16:9', '9:16'], default: '1:1' }
+  },
+  'nano-banana-pro-edit': {
+    aspect_ratio: { label: 'Aspect Ratio', values: ['1:1', '16:9', '9:16'], default: '1:1' },
+    resolution: { label: 'Resolution', values: ['1K', '2K', '4K'], default: '1K' }
+  },
+  'flux-kontext': {
+    aspect_ratio: { label: 'Aspect Ratio', values: ['1:1', '16:9', '9:16'], default: '1:1' }
+  },
+  // T2V models
+  'kling': {
+    duration: { label: 'Duration', values: ['5s', '10s'], default: '5s' }
+  },
+  'veo3-fast': {
+    aspect_ratio: { label: 'Aspect Ratio', values: ['1:1', '16:9', '9:16'], default: '16:9' },
+    resolution: { label: 'Resolution', values: ['720p', '1080p'], default: '720p' },
+    duration: { label: 'Duration', values: ['4s', '6s', '8s'], default: '4s' },
+    generate_audio: { label: 'Audio', values: ['On', 'Off'], default: 'On' }
+  },
+  'veo3': {
+    aspect_ratio: { label: 'Aspect Ratio', values: ['1:1', '16:9', '9:16'], default: '16:9' },
+    resolution: { label: 'Resolution', values: ['720p', '1080p'], default: '720p' },
+    duration: { label: 'Duration', values: ['4s', '6s', '8s'], default: '4s' },
+    generate_audio: { label: 'Audio', values: ['On', 'Off'], default: 'On' }
+  },
+  'sora2-t2v': {
+    aspect_ratio: { label: 'Aspect Ratio', values: ['auto', '9:16', '16:9'], default: 'auto' },
+    resolution: { label: 'Resolution', values: ['auto', '720p'], default: 'auto' },
+    duration: { label: 'Duration', values: ['4s', '8s', '12s'], default: '4s' }
+  },
+  'sora2-t2v-pro': {
+    aspect_ratio: { label: 'Aspect Ratio', values: ['auto', '9:16', '16:9'], default: 'auto' },
+    resolution: { label: 'Resolution', values: ['auto', '720p'], default: 'auto' },
+    duration: { label: 'Duration', values: ['4s', '8s', '12s'], default: '4s' }
+  },
+  // I2V models
+  'veo3-fast-i2v': {
+    aspect_ratio: { label: 'Aspect Ratio', values: ['1:1', '16:9', '9:16'], default: '16:9' },
+    resolution: { label: 'Resolution', values: ['720p', '1080p'], default: '720p' },
+    duration: { label: 'Duration', values: ['4s', '6s', '8s'], default: '4s' },
+    generate_audio: { label: 'Audio', values: ['On', 'Off'], default: 'On' }
+  },
+  'veo3-i2v': {
+    aspect_ratio: { label: 'Aspect Ratio', values: ['1:1', '16:9', '9:16'], default: '16:9' },
+    resolution: { label: 'Resolution', values: ['720p', '1080p'], default: '720p' },
+    duration: { label: 'Duration', values: ['4s', '6s', '8s'], default: '4s' },
+    generate_audio: { label: 'Audio', values: ['On', 'Off'], default: 'On' }
+  },
+  'sora2-i2v': {
+    aspect_ratio: { label: 'Aspect Ratio', values: ['auto', '9:16', '16:9'], default: 'auto' },
+    resolution: { label: 'Resolution', values: ['auto', '720p'], default: 'auto' },
+    duration: { label: 'Duration', values: ['4s', '8s', '12s'], default: '4s' }
+  },
+  'sora2-i2v-pro': {
+    aspect_ratio: { label: 'Aspect Ratio', values: ['auto', '9:16', '16:9'], default: 'auto' },
+    resolution: { label: 'Resolution', values: ['auto', '720p'], default: 'auto' },
+    duration: { label: 'Duration', values: ['4s', '8s', '12s'], default: '4s' }
+  },
+  // First-Last Frame to Video
+  'veo31-flf': {
+    aspect_ratio: { label: 'Aspect Ratio', values: ['auto', '9:16', '16:9', '1:1'], default: 'auto' },
+    resolution: { label: 'Resolution', values: ['720p', '1080p'], default: '720p' },
+    duration: { label: 'Duration', values: ['4s', '6s', '8s'], default: '8s' },
+    generate_audio: { label: 'Audio', values: ['On', 'Off'], default: 'On' }
+  }
+};
+
+// Track current additional options state
+let additionalOptions = {};
+let settingsExpanded = false;
 
 // Generate unique message ID
 function generateMessageId() {
@@ -80,6 +172,9 @@ function updateModelDropdown() {
     const option = document.createElement('option');
     option.value = model.id;
     option.textContent = `${model.label} (${model.price})`;
+    if (model.requiresTwoImages) {
+      option.textContent += ' [2 images]';
+    }
     modelSelect.appendChild(option);
   });
 
@@ -89,6 +184,156 @@ function updateModelDropdown() {
     modelSelect.value = currentValue;
   } else {
     modelSelect.value = DEFAULT_MODELS[currentPath];
+  }
+
+  // Update additional settings for the selected model
+  updateAdditionalSettings();
+
+  // Update two-image requirement indicator
+  updateTwoImageIndicator();
+}
+
+// Check if selected model requires two images
+function getSelectedModelConfig() {
+  const modelSelect = document.getElementById('model-select');
+  if (!modelSelect) return null;
+
+  const currentPath = getCurrentPath();
+  const models = MODEL_CONFIGS[currentPath];
+  return models.find(m => m.id === modelSelect.value);
+}
+
+// Update indicator for two-image requirement
+function updateTwoImageIndicator() {
+  const modelConfig = getSelectedModelConfig();
+  const requiresTwoImages = modelConfig?.requiresTwoImages || false;
+
+  // Get or create indicator element
+  let indicator = document.getElementById('two-image-indicator');
+  if (!indicator) {
+    indicator = document.createElement('div');
+    indicator.id = 'two-image-indicator';
+    indicator.className = 'two-image-indicator';
+    const modelSelectContainer = document.getElementById('model-select')?.parentElement;
+    if (modelSelectContainer) {
+      modelSelectContainer.appendChild(indicator);
+    }
+  }
+
+  if (requiresTwoImages) {
+    const hasEnoughImages = imageContext.length >= 2;
+    if (hasEnoughImages) {
+      indicator.innerHTML = '<span class="indicator-success">✓ 2 images ready (First & Last Frame)</span>';
+      indicator.className = 'two-image-indicator success';
+    } else {
+      indicator.innerHTML = `<span class="indicator-warning">⚠ Requires 2 images: First Frame & Last Frame (${imageContext.length}/2)</span>`;
+      indicator.className = 'two-image-indicator warning';
+    }
+    indicator.style.display = 'block';
+  } else {
+    indicator.style.display = 'none';
+  }
+
+  // Also update context preview labels
+  updateContextPreview();
+}
+
+// Toggle additional settings panel visibility
+function toggleAdditionalSettings() {
+  const content = document.getElementById('additional-settings-content');
+  const btn = document.getElementById('settings-toggle-btn');
+  const text = document.getElementById('settings-toggle-text');
+
+  settingsExpanded = !settingsExpanded;
+
+  if (settingsExpanded) {
+    content.classList.remove('hidden');
+    btn.classList.add('expanded');
+    text.textContent = 'Less options';
+  } else {
+    content.classList.add('hidden');
+    btn.classList.remove('expanded');
+    text.textContent = 'More options';
+  }
+}
+
+// Update additional settings UI based on selected model
+function updateAdditionalSettings() {
+  const modelSelect = document.getElementById('model-select');
+  const container = document.getElementById('additional-settings-container');
+  const content = document.getElementById('additional-settings-content');
+
+  if (!modelSelect || !container || !content) return;
+
+  const selectedModel = modelSelect.value;
+  const options = MODEL_OPTIONS[selectedModel];
+
+  // If no options for this model, hide the container
+  if (!options || Object.keys(options).length === 0) {
+    container.classList.add('hidden');
+    additionalOptions = {};
+    return;
+  }
+
+  // Show container
+  container.classList.remove('hidden');
+
+  // Build options HTML
+  let optionsHTML = '';
+
+  for (const [optionKey, optionConfig] of Object.entries(options)) {
+    // Initialize default value if not set
+    if (additionalOptions[optionKey] === undefined) {
+      additionalOptions[optionKey] = optionConfig.default;
+    }
+
+    optionsHTML += `
+      <div class="settings-option-group">
+        <span class="settings-option-label">${optionConfig.label}:</span>
+        <div class="settings-option-buttons">
+          ${optionConfig.values.map(value => `
+            <button
+              type="button"
+              class="option-btn ${additionalOptions[optionKey] === value ? 'selected' : ''}"
+              onclick="selectOption('${optionKey}', '${value}')"
+            >
+              ${value}
+            </button>
+          `).join('')}
+        </div>
+      </div>
+    `;
+  }
+
+  content.innerHTML = optionsHTML;
+}
+
+// Handle option selection
+function selectOption(optionKey, value) {
+  additionalOptions[optionKey] = value;
+
+  // Update UI to reflect selection
+  const container = document.getElementById('additional-settings-content');
+  const buttons = container.querySelectorAll(`[onclick*="'${optionKey}'"]`);
+
+  buttons.forEach(btn => {
+    if (btn.onclick.toString().includes(`'${value}'`)) {
+      btn.classList.add('selected');
+    } else {
+      btn.classList.remove('selected');
+    }
+  });
+}
+
+// Update enhance prompt toggle based on image context (auto-behavior)
+function updateEnhanceToggle(hasImages) {
+  const enhanceToggle = document.getElementById('enhance-prompt-toggle');
+  if (!enhanceToggle) return;
+
+  // Only auto-update if user hasn't manually set preference
+  if (!userSetEnhance) {
+    // OFF when images are added, ON when no images
+    enhanceToggle.checked = !hasImages;
   }
 }
 
@@ -161,6 +406,8 @@ function addImageToContext(image) {
   imageContext.push(image);
   updateContextPreview();
   updateModelDropdown(); // Update model options based on new context
+  updateEnhanceToggle(true); // Auto-turn off enhance when images added
+  updateTwoImageIndicator(); // Update two-image indicator
 }
 
 // Remove image from context
@@ -175,6 +422,13 @@ function removeImageFromContext(imageId) {
 
   updateContextPreview();
   updateModelDropdown(); // Update model options based on new context
+  updateTwoImageIndicator(); // Update two-image indicator
+
+  // If all images removed, reset enhance to ON
+  if (imageContext.length === 0) {
+    userSetEnhance = false;
+    updateEnhanceToggle(false);
+  }
 }
 
 // Clear all image context
@@ -188,6 +442,11 @@ function clearImageContext() {
 
   updateContextPreview();
   updateModelDropdown(); // Update model options based on new context
+  updateTwoImageIndicator(); // Update two-image indicator
+
+  // Reset enhance toggle to ON and clear user preference
+  userSetEnhance = false;
+  updateEnhanceToggle(false);
 }
 
 // Update context preview UI
@@ -204,12 +463,24 @@ function updateContextPreview() {
   preview.classList.remove('hidden');
   contextCount.textContent = imageContext.length;
 
-  contextImagesEl.innerHTML = imageContext.map(img => `
-    <div class="context-thumb">
-      <img src="${img.url}" alt="${img.source}" />
-      <div class="context-thumb-remove" onclick="removeImageFromContext('${img.id}')">×</div>
-    </div>
-  `).join('');
+  // Check if selected model requires two images (first-last frame mode)
+  const modelConfig = getSelectedModelConfig();
+  const isFirstLastFrame = modelConfig?.requiresTwoImages || false;
+
+  contextImagesEl.innerHTML = imageContext.map((img, index) => {
+    let frameLabel = '';
+    if (isFirstLastFrame) {
+      if (index === 0) frameLabel = '<div class="frame-label first">First</div>';
+      else if (index === 1) frameLabel = '<div class="frame-label last">Last</div>';
+    }
+    return `
+      <div class="context-thumb ${isFirstLastFrame && index < 2 ? 'flf-frame' : ''}">
+        ${frameLabel}
+        <img src="${img.url}" alt="${img.source}" />
+        <div class="context-thumb-remove" onclick="removeImageFromContext('${img.id}')">×</div>
+      </div>
+    `;
+  }).join('');
 }
 
 // Toggle image selection (for generated images)
@@ -243,6 +514,8 @@ async function sendMessage() {
   const currentGenType = toggleCheckbox.checked ? 'video' : 'image';
   const modelSelect = document.getElementById('model-select');
   const selectedModel = modelSelect.value;
+  const enhanceToggle = document.getElementById('enhance-prompt-toggle');
+  const enhancePrompt = enhanceToggle ? enhanceToggle.checked : true;
 
   if (!prompt || isGenerating) return;
 
@@ -252,12 +525,28 @@ async function sendMessage() {
     return;
   }
 
+  // Check if selected model requires two images
+  const modelConfig = getSelectedModelConfig();
+  if (modelConfig?.requiresTwoImages && imageContext.length < 2) {
+    appendMessage('error', `
+      <p class="font-semibold mb-2">📷 Two Images Required</p>
+      <p class="text-sm">The "${modelConfig.label}" model requires exactly 2 images:</p>
+      <ul class="text-sm mt-2 list-disc list-inside space-y-1">
+        <li><strong>First Frame:</strong> The starting image of your video</li>
+        <li><strong>Last Frame:</strong> The ending image of your video</li>
+      </ul>
+      <p class="text-sm mt-2">Please upload or select 2 images, then try again.</p>
+    `);
+    return;
+  }
+
   // Disable input during generation
   isGenerating = true;
   input.disabled = true;
   sendButton.disabled = true;
   toggleCheckbox.disabled = true;
   modelSelect.disabled = true;
+  if (enhanceToggle) enhanceToggle.disabled = true;
 
   // Clear input
   input.value = '';
@@ -287,9 +576,15 @@ async function sendMessage() {
     formData.append('sessionId', sessionId);
     formData.append('generationType', currentGenType);
     formData.append('selectedModel', selectedModel);
+    formData.append('enhancePrompt', enhancePrompt.toString());
 
     if (currentGenType === 'image') {
-      formData.append('numImages', '4');
+      formData.append('numImages', '2');
+    }
+
+    // Add additional options if any are set
+    if (Object.keys(additionalOptions).length > 0) {
+      formData.append('additionalOptions', JSON.stringify(additionalOptions));
     }
 
     // Add image context if available
@@ -367,6 +662,7 @@ async function sendMessage() {
     sendButton.disabled = false;
     toggleCheckbox.disabled = false;
     modelSelect.disabled = false;
+    if (enhanceToggle) enhanceToggle.disabled = false;
     input.focus();
   }
 }
@@ -426,7 +722,11 @@ function showLoading(genType = 'image', model = '', path = 't2i') {
       description = 'Enhancing prompt and creating video';
     }
   } else if (path === 'i2v') {
-    if (model.includes('sora')) {
+    if (model.includes('flf') || model.includes('first-last')) {
+      timeEstimate = '60-150 seconds';
+      durationSeconds = 105;
+      description = 'Enhancing prompt and generating video from First & Last frames with Veo 3.1';
+    } else if (model.includes('sora')) {
       timeEstimate = '90-180 seconds';
       durationSeconds = 135;
       description = 'Enhancing prompt and animating image with Sora (this can take 2-3 minutes)';
@@ -509,12 +809,23 @@ function displayResults(data) {
     const images = data.content.images;
     const currentCost = data.cost && data.cost.current ? data.cost.current.toFixed(3) : '0.000';
     const enhancedPrompt = data.metadata && data.metadata.enhancedPrompt ? data.metadata.enhancedPrompt : '';
+    // Escape the prompt for safe use in HTML attributes
+    const escapedPrompt = enhancedPrompt.replace(/'/g, "\\'").replace(/"/g, '&quot;');
 
     resultHTML = `
       <div class="mb-3">
         <p class="text-gray-700 font-medium mb-1">✨ Generated ${images.length} professional images!</p>
         <p class="text-xs text-blue-600 mt-1">💡 Click any image to select it for your next prompt</p>
-        ${enhancedPrompt ? `<p class="text-xs text-gray-500 italic mt-2">Enhanced prompt: ${enhancedPrompt}</p>` : ''}
+        ${enhancedPrompt ? `
+          <div class="prompt-reuse-container mt-2">
+            <p class="text-xs text-gray-500 italic">Enhanced prompt:</p>
+            <div class="prompt-reuse-box" onclick="reusePrompt('${escapedPrompt}')" title="Click to use this prompt">
+              <span class="prompt-text">${enhancedPrompt}</span>
+              <span class="prompt-reuse-hint">↩ Click to reuse</span>
+            </div>
+            <button class="prompt-copy-btn" onclick="event.stopPropagation(); copyPrompt('${escapedPrompt}', this)">📋 Copy</button>
+          </div>
+        ` : ''}
       </div>
       <div class="image-grid">
         ${images.map((img, i) => `
@@ -546,11 +857,22 @@ function displayResults(data) {
     const video = data.content.video;
     const currentCost = data.cost && data.cost.current ? data.cost.current.toFixed(3) : '0.000';
     const enhancedPrompt = data.metadata && data.metadata.enhancedPrompt ? data.metadata.enhancedPrompt : '';
+    // Escape the prompt for safe use in HTML attributes
+    const escapedPrompt = enhancedPrompt.replace(/'/g, "\\'").replace(/"/g, '&quot;');
 
     resultHTML = `
       <div class="mb-3">
         <p class="text-gray-700 font-medium mb-1">🎬 Generated professional video!</p>
-        ${enhancedPrompt ? `<p class="text-xs text-gray-500 italic mt-2">Enhanced prompt: ${enhancedPrompt}</p>` : ''}
+        ${enhancedPrompt ? `
+          <div class="prompt-reuse-container mt-2">
+            <p class="text-xs text-gray-500 italic">Enhanced prompt:</p>
+            <div class="prompt-reuse-box" onclick="reusePrompt('${escapedPrompt}')" title="Click to use this prompt">
+              <span class="prompt-text">${enhancedPrompt}</span>
+              <span class="prompt-reuse-hint">↩ Click to reuse</span>
+            </div>
+            <button class="prompt-copy-btn" onclick="event.stopPropagation(); copyPrompt('${escapedPrompt}', this)">📋 Copy</button>
+          </div>
+        ` : ''}
       </div>
       <div class="video-container">
         <video controls loop>
@@ -607,6 +929,34 @@ function downloadVideo(url) {
   link.click();
 }
 
+// Reuse prompt - put it back in the input box
+function reusePrompt(prompt) {
+  const input = document.getElementById('prompt-input');
+  if (input) {
+    input.value = prompt;
+    input.focus();
+    // Optional: show a brief visual feedback
+    input.classList.add('prompt-inserted');
+    setTimeout(() => input.classList.remove('prompt-inserted'), 500);
+  }
+}
+
+// Copy prompt to clipboard
+function copyPrompt(prompt, buttonEl) {
+  navigator.clipboard.writeText(prompt).then(() => {
+    // Show feedback on the button
+    const originalText = buttonEl.textContent;
+    buttonEl.textContent = '✓ Copied!';
+    buttonEl.classList.add('copied');
+    setTimeout(() => {
+      buttonEl.textContent = originalText;
+      buttonEl.classList.remove('copied');
+    }, 1500);
+  }).catch(err => {
+    console.error('Failed to copy:', err);
+  });
+}
+
 // Update hint text based on toggle state
 function updateHintText() {
   const toggle = document.getElementById('generation-type-toggle');
@@ -649,6 +999,24 @@ document.addEventListener('DOMContentLoaded', () => {
   // Add toggle event listener
   const toggle = document.getElementById('generation-type-toggle');
   toggle.addEventListener('change', updateHintText);
+
+  // Add enhance toggle event listener to track user preference
+  const enhanceToggle = document.getElementById('enhance-prompt-toggle');
+  if (enhanceToggle) {
+    enhanceToggle.addEventListener('change', () => {
+      // Mark that user has manually set preference
+      userSetEnhance = true;
+    });
+  }
+
+  // Add model select event listener for additional settings and indicator
+  const modelSelect = document.getElementById('model-select');
+  if (modelSelect) {
+    modelSelect.addEventListener('change', () => {
+      updateAdditionalSettings();
+      updateTwoImageIndicator();
+    });
+  }
 
   // Initialize model dropdown
   updateModelDropdown();

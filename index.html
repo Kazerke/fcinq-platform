@@ -50,11 +50,31 @@
           </label>
           <span class="text-sm font-medium text-gray-700">Video</span>
         </div>
-        <div class="flex items-center gap-2">
-          <label for="model-select" class="text-sm font-medium text-gray-700">Model:</label>
-          <select id="model-select" class="model-dropdown">
-            <option value="nano-banana">Nano Banana ($0.05)</option>
-          </select>
+        <div class="flex items-center gap-4">
+          <div class="flex items-center gap-2">
+            <label for="model-select" class="text-sm font-medium text-gray-700">Model:</label>
+            <select id="model-select" class="model-dropdown">
+              <option value="nano-banana">Nano Banana ($0.05)</option>
+            </select>
+          </div>
+          <div class="flex items-center gap-2">
+            <label class="toggle-switch-small">
+              <input type="checkbox" id="enhance-prompt-toggle" checked>
+              <span class="toggle-slider-small"></span>
+            </label>
+            <span class="text-xs font-medium text-gray-600">Enhance</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Additional Settings (expandable) -->
+      <div id="additional-settings-container" class="hidden mb-3">
+        <button type="button" id="settings-toggle-btn" onclick="toggleAdditionalSettings()" class="settings-toggle-btn">
+          <span id="settings-toggle-text">More options</span>
+          <span id="settings-toggle-icon" class="settings-toggle-icon">+</span>
+        </button>
+        <div id="additional-settings-content" class="additional-settings-content hidden">
+          <!-- Options will be dynamically populated here -->
         </div>
       </div>
 
