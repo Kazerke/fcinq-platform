@@ -714,3 +714,53 @@ button:disabled {
   background: #8b5cf6;
   color: white;
 }
+
+/* Turnaround Sheet Button */
+.turnaround-option {
+  margin-bottom: 16px !important;
+  padding-bottom: 12px;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.turnaround-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  width: 100%;
+  padding: 16px 20px;
+  background: linear-gradient(135deg, #8b5cf6 0%, #6366f1 100%);
+  border: none;
+  border-radius: 10px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  box-shadow: 0 2px 8px rgba(139, 92, 246, 0.25);
+}
+
+.turnaround-btn:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 16px rgba(139, 92, 246, 0.35);
+  background: linear-gradient(135deg, #7c3aed 0%, #4f46e5 100%);
+}
+
+.turnaround-btn:active {
+  transform: translateY(0);
+  box-shadow: 0 2px 8px rgba(139, 92, 246, 0.25);
+}
+
+.turnaround-icon {
+  font-size: 24px;
+}
+
+.turnaround-text {
+  font-size: 14px;
+  font-weight: 600;
+  color: white;
+}
+
+.turnaround-hint {
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.8);
+  font-weight: 400;
+}

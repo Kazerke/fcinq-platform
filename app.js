@@ -138,6 +138,9 @@ const MODEL_OPTIONS = {
 let additionalOptions = {};
 let settingsExpanded = false;
 
+// Turnaround sheet hardcoded prompt
+const TURNAROUND_PROMPT = "Character or main object turnaround sheet showing front view, left profile, right profile, back view. Same subject in all views, consistent appearance, subject is still the camera moves around to provide the 4 views, the background is still as well and keeping details, all the images in a single image, like a 4 grid square image canvas";
+
 // Generate unique message ID
 function generateMessageId() {
   return `msg-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
@@ -238,6 +241,18 @@ function updateTwoImageIndicator() {
   updateContextPreview();
 }
 
+// Generate turnaround sheet (4 angles) - triggered by button click
+async function generateTurnaroundSheet() {
+  if (isGenerating) return;
+  if (imageContext.length === 0) {
+    appendMessage('error', 'Please add a reference image first to generate a turnaround sheet.');
+    return;
+  }
+
+  // Trigger generation with turnaround mode
+  await sendMessage(true);
+}
+
 // Toggle additional settings panel visibility
 function toggleAdditionalSettings() {
   const content = document.getElementById('additional-settings-content');
@@ -267,9 +282,15 @@ function updateAdditionalSettings() {
 
   const selectedModel = modelSelect.value;
   const options = MODEL_OPTIONS[selectedModel];
+  const currentPath = getCurrentPath();
+  const hasImages = imageContext.length > 0;
+  const isImageMode = currentPath === 't2i' || currentPath === 'i2i';
 
-  // If no options for this model, hide the container
-  if (!options || Object.keys(options).length === 0) {
+  // Check if we have turnaround option available (i2i path only)
+  const showTurnaround = hasImages && isImageMode;
+
+  // If no options for this model and no turnaround, hide the container
+  if ((!options || Object.keys(options).length === 0) && !showTurnaround) {
     container.classList.add('hidden');
     additionalOptions = {};
     return;
@@ -281,28 +302,48 @@ function updateAdditionalSettings() {
   // Build options HTML
   let optionsHTML = '';
 
-  for (const [optionKey, optionConfig] of Object.entries(options)) {
-    // Initialize default value if not set
-    if (additionalOptions[optionKey] === undefined) {
-      additionalOptions[optionKey] = optionConfig.default;
-    }
-
+  // Add turnaround sheet option first if available (i2i path with image)
+  if (showTurnaround) {
     optionsHTML += `
-      <div class="settings-option-group">
-        <span class="settings-option-label">${optionConfig.label}:</span>
-        <div class="settings-option-buttons">
-          ${optionConfig.values.map(value => `
-            <button
-              type="button"
-              class="option-btn ${additionalOptions[optionKey] === value ? 'selected' : ''}"
-              onclick="selectOption('${optionKey}', '${value}')"
-            >
-              ${value}
-            </button>
-          `).join('')}
-        </div>
+      <div class="settings-option-group turnaround-option">
+        <button
+          type="button"
+          class="turnaround-btn"
+          onclick="generateTurnaroundSheet()"
+        >
+          <span class="turnaround-icon">🔄</span>
+          <span class="turnaround-text">Generate 4-Angle Turnaround</span>
+          <span class="turnaround-hint">Creates front, left, right, back views</span>
+        </button>
       </div>
     `;
+  }
+
+  // Add model-specific options
+  if (options && Object.keys(options).length > 0) {
+    for (const [optionKey, optionConfig] of Object.entries(options)) {
+      // Initialize default value if not set
+      if (additionalOptions[optionKey] === undefined) {
+        additionalOptions[optionKey] = optionConfig.default;
+      }
+
+      optionsHTML += `
+        <div class="settings-option-group">
+          <span class="settings-option-label">${optionConfig.label}:</span>
+          <div class="settings-option-buttons">
+            ${optionConfig.values.map(value => `
+              <button
+                type="button"
+                class="option-btn ${additionalOptions[optionKey] === value ? 'selected' : ''}"
+                onclick="selectOption('${optionKey}', '${value}')"
+              >
+                ${value}
+              </button>
+            `).join('')}
+          </div>
+        </div>
+      `;
+    }
   }
 
   content.innerHTML = optionsHTML;
@@ -506,16 +547,18 @@ function toggleImageSelection(imageId, imageUrl) {
 }
 
 // Send message to n8n webhook with timeout
-async function sendMessage() {
+async function sendMessage(turnaroundMode = false) {
   const input = document.getElementById('prompt-input');
   const sendButton = document.getElementById('send-button');
-  const prompt = input.value.trim();
   const toggleCheckbox = document.getElementById('generation-type-toggle');
-  const currentGenType = toggleCheckbox.checked ? 'video' : 'image';
   const modelSelect = document.getElementById('model-select');
-  const selectedModel = modelSelect.value;
   const enhanceToggle = document.getElementById('enhance-prompt-toggle');
-  const enhancePrompt = enhanceToggle ? enhanceToggle.checked : true;
+
+  // For turnaround mode, use hardcoded prompt; otherwise use input
+  const prompt = turnaroundMode ? TURNAROUND_PROMPT : input.value.trim();
+  const currentGenType = turnaroundMode ? 'image' : (toggleCheckbox.checked ? 'video' : 'image');
+  const selectedModel = turnaroundMode ? 'nano-banana-pro-edit' : modelSelect.value;
+  const enhancePrompt = turnaroundMode ? false : (enhanceToggle ? enhanceToggle.checked : true);
 
   if (!prompt || isGenerating) return;
 
@@ -548,11 +591,17 @@ async function sendMessage() {
   modelSelect.disabled = true;
   if (enhanceToggle) enhanceToggle.disabled = true;
 
-  // Clear input
-  input.value = '';
+  // Clear input (only if not turnaround mode)
+  if (!turnaroundMode) {
+    input.value = '';
+  }
 
   // Display user message
-  appendMessage('user', prompt);
+  if (turnaroundMode) {
+    appendMessage('user', '🔄 Generate 4-Angle Turnaround Sheet');
+  } else {
+    appendMessage('user', prompt);
+  }
 
   // Determine timeout based on model and generation type
   const currentPath = getCurrentPath();
@@ -585,6 +634,11 @@ async function sendMessage() {
     // Add additional options if any are set
     if (Object.keys(additionalOptions).length > 0) {
       formData.append('additionalOptions', JSON.stringify(additionalOptions));
+    }
+
+    // Add turnaround sheet flag if in turnaround mode
+    if (turnaroundMode) {
+      formData.append('turnaroundSheet', 'true');
     }
 
     // Add image context if available
